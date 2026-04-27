@@ -1,0 +1,11 @@
+flask
+flask-cors
+openai-whisper
+gTTS
+pydub
+torch
+openai
+google-genai
+python-dotenv
+PyPDF2
+python-docx
