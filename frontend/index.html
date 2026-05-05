@@ -28,66 +28,83 @@
         </section>
 
         <!-- Dashboard Screen (Hidden by default) -->
-        <div id="dashboard-screen" class="hidden">
-            <header class="header">
-                <div class="header-top">
-                    <div class="header-left">
-                        <div class="logo-mini" id="back-to-landing">
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
-                        </div>
-                        <div class="brand-info">
-                            <h1>EchoSync AI</h1>
-                            <p id="mode-description">Generative Voice Synthesis</p>
-                        </div>
+        <div id="dashboard-screen" class="hidden app-layout">
+            <!-- Sidebar for Metrics -->
+            <aside class="sidebar" id="sidebar">
+                <div class="sidebar-header">
+                    <button id="toggle-sidebar" class="btn-icon toggle-btn" title="Toggle Sidebar">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+                    </button>
+                    <span class="sidebar-label">EchoSync AI</span>
+                </div>
+                
+                <nav class="sidebar-nav">
+                    <div class="nav-item active" id="nav-home" data-view="home">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+                        <span class="nav-label">Home</span>
                     </div>
-                    <div class="mode-selector">
-                        <label for="app-mode">Tool Mode:</label>
-                        <select id="app-mode">
-                            <option value="tts" selected>Text to Speech (Generative)</option>
-                            <option value="stt">Speech to Text (Whisper)</option>
-                        </select>
+                    <div class="nav-item" id="nav-evaluation" data-view="evaluation">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+                        <span class="nav-label">Evaluation</span>
+                    </div>
+                </nav>
+
+                <div class="sidebar-status">
+                    <div class="metric-item mini">
+                        <label class="nav-label">System Status</label>
+                        <span class="status-pill">Operational</span>
                     </div>
                 </div>
-            </header>
 
-            <main class="dashboard-content">
-                <!-- Text to Speech Section (Default) -->
-                <section class="card" id="tts-card">
-                    <div class="card-header">
-                        <h2>
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
-                            Generative TTS
-                        </h2>
-                        <span class="badge">Premium</span>
+                <div class="sidebar-footer">
+                    <div class="logo-mini" id="back-to-landing" title="Back to Landing">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                        <span class="nav-label" style="margin-left: 10px;">Exit App</span>
                     </div>
-                    
-                    <div class="tts-grid">
-                        <!-- Left Side: Input & Translation -->
-                        <div class="input-side">
-                            <div class="input-group">
-                                <div class="label-with-action">
-                                    <label>Original Text</label>
-                                    <label for="file-upload" class="btn-icon" title="Upload PDF/DOCX/TXT">
-                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                                        Import File
-                                    </label>
-                                    <input type="file" id="file-upload" hidden accept=".pdf,.docx,.txt">
+                </div>
+            </aside>
+
+            <!-- Main Content Area -->
+            <div class="main-content">
+                <!-- Home View -->
+                <div id="view-home" class="view-panel">
+                    <header class="header">
+                        <div class="header-top">
+                            <div class="header-left">
+                                <div class="brand-info">
+                                    <h1>EchoSync AI</h1>
+                                    <div class="header-subtitle-row">
+                                        <p id="mode-description">Generative Voice Synthesis</p>
+                                        <span id="sentiment-badge" class="sentiment-badge" style="display:none;"></span>
+                                    </div>
                                 </div>
-                                <textarea id="tts-input" rows="8" placeholder="Type or upload a file to convert to speech..."></textarea>
                             </div>
-                            <div class="input-group" id="translated-group" style="display: none;">
-                                <label>Translated Text</label>
-                                <textarea id="translated-text" rows="8" readonly placeholder="Translation will appear here..."></textarea>
+                            <div class="mode-selector">
+                                <label for="app-mode">Tool Mode:</label>
+                                <select id="app-mode">
+                                    <option value="tts" selected>Text to Speech</option>
+                                    <option value="stt">Speech to Text</option>
+                                </select>
                             </div>
                         </div>
-
-                        <!-- Right Side: Controls -->
-                        <div class="controls-side">
-                            <div class="settings-grid">
-                                <div class="input-group">
+                    </header>
+        
+                    <main class="dashboard-content">
+                        <!-- Text to Speech Section (Default) -->
+                        <section class="card" id="tts-card">
+                            <div class="card-header">
+                                <h2>
+                                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+                                    Generative TTS
+                                </h2>
+                                <span class="badge">Premium</span>
+                            </div>
+                            
+                            <div class="controls-row">
+                                <div class="control-item">
                                     <label>Translate to (Optional)</label>
                                     <select id="translate-lang">
-                                        <option value="">No Translation (English)</option>
+                                        <option value="">No Translation</option>
                                         <option value="Hindi">Hindi</option>
                                         <option value="Telugu">Telugu</option>
                                         <option value="Tamil">Tamil</option>
@@ -136,109 +153,232 @@
                                         <option value="Swahili">Swahili</option>
                                     </select>
                                 </div>
-                                <div class="input-group">
+                                <div class="control-item">
                                     <label>Voice</label>
                                     <select id="voice-select">
                                         <option value="">Loading voices...</option>
                                     </select>
                                 </div>
-                                <div class="sliders-grid">
-                                    <div class="range-group">
-                                        <label>Rate</label>
-                                        <input type="range" id="rate" min="0.5" max="2" value="1" step="0.1">
-                                    </div>
-                                    <div class="range-group">
-                                        <label>Pitch</label>
-                                        <input type="range" id="pitch" min="0" max="2" value="1" step="0.1">
+                                <div class="control-item">
+                                    <label>AI Persona</label>
+                                    <select id="persona-select">
+                                        <option value="">Standard (Normal)</option>
+                                        <option value="shakespearean">Shakespearean</option>
+                                        <option value="cyberpunk">Cyberpunk Edge</option>
+                                        <option value="corporate">Executive Pro</option>
+                                        <option value="pirate">Captain Jack</option>
+                                        <option value="toddler">Curious Toddler</option>
+                                        <option value="philosopher">Stoic Philosopher</option>
+                                    </select>
+                                </div>
+                                <div class="control-item">
+                                    <label>Rate</label>
+                                    <input type="range" id="rate" min="0.5" max="2" value="1" step="0.1">
+                                </div>
+                                <div class="control-item">
+                                    <label>Pitch</label>
+                                    <input type="range" id="pitch" min="0" max="2" value="1" step="0.1">
+                                </div>
+                                <div class="control-item action-item">
+                                    <div class="tts-btn-group">
+                                        <button class="btn btn-primary" id="speak-btn">
+                                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                                            Generate Audio
+                                        </button>
+                                        <button class="btn btn-outline-danger" id="stop-btn" style="display: none;">
+                                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12"/></svg>
+                                        </button>
                                     </div>
                                 </div>
                             </div>
                             
-                            <div class="tts-btn-group">
-                                <button class="btn btn-primary" id="speak-btn">
-                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-                                    Generate Audio
-                                </button>
-                                <button class="btn btn-outline-danger" id="stop-btn" style="display: none;">
-                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12"/></svg>
-                                    Stop
-                                </button>
+                            <div class="tts-main-layout">
+                                <div class="text-panel">
+                                    <div class="text-panel-header">
+                                        <div class="text-toggle" id="tts-text-toggle">
+                                            <button class="toggle-pill active" data-pane="original">Original</button>
+                                            <button class="toggle-pill" data-pane="processed">Processed</button>
+                                        </div>
+                                        <div class="text-panel-actions">
+                                            <label for="file-upload" class="btn-icon" title="Upload PDF/DOCX/TXT">
+                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                                                Import
+                                            </label>
+                                            <input type="file" id="file-upload" hidden accept=".pdf,.docx,.txt">
+                                        </div>
+                                    </div>
+                                    <div class="text-pane-wrapper">
+                                        <textarea id="tts-input" class="text-pane active" placeholder="Type or upload text..."></textarea>
+                                        <textarea id="translated-text" class="text-pane" placeholder="AI result or translation will appear here..."></textarea>
+                                    </div>
+                                    <div class="ai-tools-group">
+                                        <span class="ai-tools-label"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg> AI Tools:</span>
+                                        <button class="btn btn-outline-ai btn-sm ai-btn" data-action="summarize" data-target="tts-input">Summarize</button>
+                                        <button class="btn btn-outline-ai btn-sm ai-btn" data-action="polish" data-target="tts-input">Polish</button>
+                                        <button class="btn btn-outline-ai btn-sm ai-btn" data-action="tone" data-target="tts-input">Tone</button>
+                                        <span class="ai-result-badge" id="tts-tone-badge" style="display:none;"></span>
+                                    </div>
+                                    <div id="audio-container"></div>
+                                </div>
                             </div>
-                            <div id="audio-container"></div>
-                        </div>
-                    </div>
-                </section>
+                        </section>
+        
+                        <!-- Speech to Text Section (Hidden) -->
+                        <section class="card hidden" id="stt-card">
+                            <div class="card-header">
+                                <h2>
+                                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
+                                    Whisper STT
+                                </h2>
+                                <div class="header-actions">
+                                    <div class="toggle-group">
+                                        <label class="switch-label">Conversation Mode</label>
+                                        <label class="switch">
+                                            <input type="checkbox" id="conversation-toggle">
+                                            <span class="slider round"></span>
+                                        </label>
+                                    </div>
+                                    <span class="badge">AI Engine</span>
+                                </div>
+                            </div>
+                            <div class="text-panel">
+                                <div class="text-panel-header">
+                                    <div class="text-toggle" id="stt-text-toggle">
+                                        <button class="toggle-pill active" data-pane="original">Transcription</button>
+                                        <button class="toggle-pill" data-pane="processed">Processed</button>
+                                    </div>
+                                    <div class="text-panel-actions">
+                                    <div class="status-indicator">
+                                        <span class="dot" id="stt-dot"></span>
+                                        <span id="stt-status">System Ready</span>
+                                        <span id="ai-thinking" class="thinking-text hidden">AI Thinking...</span>
+                                    </div>
+                                        <button class="btn btn-primary btn-sm" id="start-stt">
+                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v8"/><path d="M8 12h8"/></svg>
+                                            Record
+                                        </button>
+                                        <button class="btn btn-outline btn-sm" id="copy-stt">Copy</button>
+                                        <button class="btn btn-outline btn-sm" id="clear-stt">Clear</button>
+                                    </div>
+                                </div>
+                                <div class="text-pane-wrapper">
+                                    <textarea id="stt-result" class="text-pane active" placeholder="Transcribed text will appear here..."></textarea>
+                                    <textarea id="stt-processed-text" class="text-pane" placeholder="Summarized or polished transcription..."></textarea>
+                                </div>
+                                <div class="ai-tools-group">
+                                    <span class="ai-tools-label"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg> AI Tools:</span>
+                                    <button class="btn btn-outline-ai btn-sm ai-btn" data-action="summarize" data-target="stt-result">Summarize</button>
+                                    <button class="btn btn-outline-ai btn-sm ai-btn" data-action="polish" data-target="stt-result">Polish</button>
+                                    <button class="btn btn-outline-ai btn-sm ai-btn" data-action="tone" data-target="stt-result">Tone</button>
+                                    <span class="ai-result-badge" id="stt-tone-badge" style="display:none;"></span>
+                                </div>
+                            </div>
+                            <div class="visualizer-container">
+                                <canvas id="visualizer"></canvas>
+                            </div>
+                        </section>
+                    </main>
+                </div>
 
-                <!-- Speech to Text Section (Hidden) -->
-                <section class="card hidden" id="stt-card">
-                    <div class="card-header">
-                        <h2>
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
-                            Whisper STT
-                        </h2>
-                        <span class="badge">AI Engine</span>
-                    </div>
-                    <div class="input-group">
-                        <textarea id="stt-result" rows="8" placeholder="Transcribed text will appear here..."></textarea>
-                    </div>
-                    <div class="controls">
-                        <div class="status-indicator">
-                            <span class="dot" id="stt-dot"></span>
-                            <span id="stt-status">System Ready</span>
+                <!-- Evaluation View -->
+                <div id="view-evaluation" class="view-panel hidden">
+                    <header class="header">
+                        <div class="brand-info">
+                            <h1>AI Intelligence Evaluation</h1>
+                            <p>Real-time performance and model metrics</p>
                         </div>
-                        <div class="btn-group">
-                            <button class="btn btn-primary" id="start-stt">
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v8"/><path d="M8 12h8"/></svg>
-                                Start Recording
-                            </button>
-                            <button class="btn btn-outline" id="copy-stt">Copy</button>
-                            <button class="btn btn-outline" id="clear-stt">Clear</button>
-                        </div>
-                        <div class="visualizer-container">
-                            <canvas id="visualizer"></canvas>
-                        </div>
-                    </div>
-                </section>
-            </main>
+                    </header>
 
-            <!-- Evaluation & Performance Dashboard (Requirements Fulfillment) -->
-            <footer class="analytics-section">
-                <div class="analytics-card">
-                    <div class="analytics-header">
-                        <h3>
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-                            AI Performance Metrics (Evaluation)
-                        </h3>
-                        <span class="badge">Live</span>
-                    </div>
-                    <div class="metrics-grid">
-                        <div class="metric-item">
-                            <label>STT Model</label>
-                            <span id="metric-stt-model">Whisper Base</span>
+                    <div class="evaluation-container">
+                        <!-- Speech-to-Text (Input) Intelligence -->
+                        <div class="evaluation-section">
+                            <div class="section-header">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
+                                <h2>Input Intelligence (STT)</h2>
+                            </div>
+                            <div class="evaluation-grid">
+                                <div class="evaluation-card">
+                                    <h3>Model & Accuracy</h3>
+                                    <div class="metrics-list">
+                                        <div class="metric-item">
+                                            <label>Model</label>
+                                            <span id="eval-stt-model">Whisper Large-v3</span>
+                                        </div>
+                                        <div class="metric-item">
+                                            <label>Avg Transcription</label>
+                                            <span id="eval-stt-latency">0.0s</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="evaluation-card">
+                                    <h3>Input Volume</h3>
+                                    <div class="metrics-list">
+                                        <div class="metric-item">
+                                            <label>Total Words</label>
+                                            <span id="eval-word-count">0</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
-                        <div class="metric-item">
-                            <label>TTS Intelligence</label>
-                            <span id="metric-tts-model">Gemini 2.0 Flash</span>
+
+                        <!-- Text-to-Speech (Output) Intelligence -->
+                        <div class="evaluation-section">
+                            <div class="section-header">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5h2"/><path d="M15 9l-3-3-3 3"/><path d="M12 6v14"/></svg>
+                                <h2>Output Intelligence (TTS)</h2>
+                            </div>
+                            <div class="evaluation-grid">
+                                <div class="evaluation-card">
+                                    <h3>Synthesis & Speed</h3>
+                                    <div class="metrics-list">
+                                        <div class="metric-item">
+                                            <label>Engine</label>
+                                            <span id="eval-tts-model">Web Speech API</span>
+                                        </div>
+                                        <div class="metric-item">
+                                            <label>Avg Synthesis</label>
+                                            <span id="eval-tts-latency">0.0s</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="evaluation-card">
+                                    <h3>Output Volume</h3>
+                                    <div class="metrics-list">
+                                        <div class="metric-item">
+                                            <label>Total Characters</label>
+                                            <span id="eval-char-count">0</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
-                        <div class="metric-item">
-                            <label>Transcription Latency</label>
-                            <span id="metric-stt-latency">0.0s</span>
-                        </div>
-                        <div class="metric-item">
-                            <label>Translation Latency</label>
-                            <span id="metric-tts-latency">0.0s</span>
-                        </div>
-                        <div class="metric-item">
-                            <label>Word Count</label>
-                            <span id="metric-word-count">0</span>
-                        </div>
-                        <div class="metric-item">
-                            <label>System Status</label>
-                            <span class="status-pill">Operational</span>
+
+                        <!-- Core Intelligence Section -->
+                        <div class="evaluation-section wide">
+                            <div class="section-header">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 10 10H12V2z"/><path d="M12 12L2.7 16.5"/><path d="M12 12l5.3 8.3"/></svg>
+                                <h2>Reasoning Intelligence (AI)</h2>
+                            </div>
+                            <div class="evaluation-grid">
+                                <div class="evaluation-card">
+                                    <h3>Model Logic</h3>
+                                    <div class="metrics-list">
+                                        <div class="metric-item">
+                                            <label>Primary Core</label>
+                                            <span>Gemini 2.0 Flash</span>
+                                        </div>
+                                        <div class="metric-item">
+                                            <label>Avg Reasoning Speed</label>
+                                            <span id="eval-ai-latency">0.0s</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
-            </footer>
+            </div>
         </div>
     </div>
     <script src="app.js"></script>

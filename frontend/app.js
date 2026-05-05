@@ -5,7 +5,40 @@ class EchoSync {
         this.initSTT();
         this.initTTS();
         this.initVisualizer();
+        this.initMetrics();
         this.bindEvents();
+    }
+
+    initMetrics() {
+        const savedMetrics = localStorage.getItem('echosync_metrics');
+        if (savedMetrics) {
+            this.metrics = JSON.parse(savedMetrics);
+            // Support legacy format or ensure all keys exist
+            this.metrics.stt = this.metrics.stt || { total: 0, count: 0 };
+            this.metrics.tts = this.metrics.tts || { total: 0, count: 0 };
+            this.metrics.ai = this.metrics.ai || { total: 0, count: 0 };
+            this.metrics.wordCount = this.metrics.wordCount || 0;
+            this.metrics.charCount = this.metrics.charCount || 0;
+
+            // Update UI with saved values
+            this.updateMetric('stt-latency', `${(this.metrics.stt.total / (this.metrics.stt.count || 1)).toFixed(2)}s`);
+            this.updateMetric('tts-latency', `${(this.metrics.tts.total / (this.metrics.tts.count || 1)).toFixed(2)}s`);
+            this.updateMetric('ai-latency', `${(this.metrics.ai.total / (this.metrics.ai.count || 1)).toFixed(2)}s`);
+            this.updateMetric('word-count', this.metrics.wordCount);
+            this.updateMetric('char-count', this.metrics.charCount);
+        } else {
+            this.metrics = {
+                stt: { total: 0, count: 0 },
+                tts: { total: 0, count: 0 },
+                ai: { total: 0, count: 0 },
+                wordCount: 0,
+                charCount: 0
+            };
+        }
+    }
+
+    saveMetrics() {
+        localStorage.setItem('echosync_metrics', JSON.stringify(this.metrics));
     }
 
     initLanding() {
@@ -82,9 +115,24 @@ class EchoSync {
                 this.updateSTTUI(false, 'System Ready');
                 
                 // Update Metrics
-                const latency = ((endTime - startTime) / 1000).toFixed(2);
-                document.getElementById('metric-stt-latency').textContent = `${latency}s`;
-                document.getElementById('metric-word-count').textContent = data.text.split(/\s+/).length;
+                const latency = (endTime - startTime) / 1000;
+                this.metrics.stt.total += latency;
+                this.metrics.stt.count++;
+                this.saveMetrics();
+                this.updateMetric('stt-latency', `${(this.metrics.stt.total / this.metrics.stt.count).toFixed(2)}s`);
+                
+                const words = data.text.split(/\s+/).filter(w => w).length;
+                this.metrics.wordCount = (this.metrics.wordCount || 0) + words;
+                this.saveMetrics();
+                this.updateMetric('word-count', this.metrics.wordCount);
+
+                // Auto-analyze sentiment
+                this.handleAIAction('tone', 'stt-result', null);
+
+                // --- CONVERSATION MODE LOOP ---
+                if (document.getElementById('conversation-toggle').checked) {
+                    this.handleConversation(data.text);
+                }
             } else {
                 this.updateSTTUI(false, 'Error: ' + (data.error || 'Unknown error'));
             }
@@ -213,24 +261,57 @@ class EchoSync {
         }
     }
 
-    async speak() {
+    async applyPersona(text, persona) {
+        if (!persona) return text;
+        
+        const startTime = performance.now();
+        try {
+            const response = await fetch('/api/ai-process', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'persona', text, persona })
+            });
+            const data = await response.json();
+            const endTime = performance.now();
+
+            // Update Metrics
+            const latency = (endTime - startTime) / 1000;
+            this.metrics.processing.total += latency;
+            this.metrics.processing.count++;
+            this.saveMetrics();
+            this.updateMetric('tts-latency', `${(this.metrics.processing.total / this.metrics.processing.count).toFixed(2)}s`);
+
+            return data.result || text;
+        } catch (err) {
+            console.error('Persona error:', err);
+            return text;
+        }
+    }
+
+    async speak(overrideText = null) {
         if (this.synth.speaking) {
             this.synth.cancel();
-            // Small pause to allow synth to reset
             await new Promise(resolve => setTimeout(resolve, 100));
         }
 
-        let text = document.getElementById('tts-input').value;
+        let text = overrideText || document.getElementById('tts-input').value;
         const targetLang = document.getElementById('translate-lang').value;
+        const persona = document.getElementById('persona-select').value;
         
         if (!text) return;
 
         this.speakBtn.disabled = true;
         this.speakBtn.textContent = 'Processing...';
 
-        // Translation Step
+        // Only apply persona if we aren't already speaking an AI-generated chat reply
+        if (persona && !overrideText) {
+            this.speakBtn.textContent = 'Rewriting...';
+            text = await this.applyPersona(text, persona);
+            document.getElementById('translated-text').value = text;
+            this.switchTextPane(document.getElementById('tts-text-toggle'), 'processed');
+        }
+
         let speakText = text;
-        const translatedGroup = document.getElementById('translated-group');
         const translatedTextArea = document.getElementById('translated-text');
 
         if (targetLang) {
@@ -246,15 +327,24 @@ class EchoSync {
 
                 if (data.translated_text) {
                     speakText = data.translated_text;
-                    // Show translated text in the new area
+                    // Show translated text in the results area
                     translatedTextArea.value = speakText;
-                    translatedGroup.style.display = 'block';
                     this.modeDescription.textContent = `Translated to ${targetLang}`;
+                    // Auto-switch to Processed tab
+                    const ttsToggle = document.getElementById('tts-text-toggle');
+                    this.switchTextPane(ttsToggle, 'processed');
                     
                     // Update Metrics
-                    const latency = ((endTime - startTime) / 1000).toFixed(2);
-                    document.getElementById('metric-tts-latency').textContent = `${latency}s`;
-                    document.getElementById('metric-word-count').textContent = speakText.split(/\s+/).length;
+                    const latency = (endTime - startTime) / 1000;
+                    this.metrics.processing.total += latency;
+                    this.metrics.processing.count++;
+                    this.saveMetrics();
+                    this.updateMetric('tts-latency', `${(this.metrics.processing.total / this.metrics.processing.count).toFixed(2)}s`);
+
+                    const words = speakText.split(/\s+/).filter(w => w).length;
+                    this.metrics.wordCount = (this.metrics.wordCount || 0) + words;
+                    this.saveMetrics();
+                    this.updateMetric('word-count', this.metrics.wordCount);
                 } else {
                     console.warn('Translation returned no text:', data);
                     alert('Translation failed: ' + (data.error || 'Unknown error'));
@@ -264,12 +354,23 @@ class EchoSync {
                 alert('Could not connect to translation service.');
             }
         }
- else {
-            // Hide translation area if no translation selected
-            translatedGroup.style.display = 'none';
-        }
 
+        const startTTS = performance.now();
         const utterance = new SpeechSynthesisUtterance(speakText);
+        
+        // Track TTS Metrics
+        utterance.onstart = () => {
+            const endTTS = performance.now();
+            const ttsLatency = (endTTS - startTTS) / 1000;
+            this.metrics.tts.total += ttsLatency;
+            this.metrics.tts.count++;
+            this.metrics.charCount += speakText.length;
+            this.saveMetrics();
+            
+            this.updateMetric('tts-latency', `${(this.metrics.tts.total / this.metrics.tts.count).toFixed(2)}s`);
+            this.updateMetric('char-count', this.metrics.charCount);
+        };
+
         const voiceSelect = document.getElementById('voice-select');
         let selectedVoiceIndex = voiceSelect.value;
         
@@ -317,6 +418,8 @@ class EchoSync {
         this.stopBtn.style.display = 'none';
     }
 
+
+
     // --- Audio Visualizer ---
     initVisualizer() {
         this.canvas = document.getElementById('visualizer');
@@ -362,30 +465,206 @@ class EchoSync {
         const height = this.canvas.height;
         this.ctx.clearRect(0, 0, width, height);
 
-        const barWidth = (width / this.dataArray.length);
-        let x = 0;
-
+        const barWidth = (width / this.dataArray.length) * 0.8;
+        const centerX = width / 2;
+        
         for (let i = 0; i < this.dataArray.length; i++) {
-            const barHeight = (this.dataArray[i] / 255) * height;
+            const barHeight = (this.dataArray[i] / 255) * height * 0.8;
             
-            this.ctx.fillStyle = `rgba(139, 92, 246, ${0.3 + (barHeight/height)})`;
-            this.ctx.fillRect(x, height - barHeight, barWidth - 2, barHeight);
-            x += barWidth;
+            // Get color from dynamic theme
+            const accent = getComputedStyle(document.body).getPropertyValue('--accent-dynamic').trim();
+            
+            this.ctx.fillStyle = accent;
+            this.ctx.globalAlpha = 0.3 + (barHeight/height);
+            
+            // Draw Symmetric (Mirrored) Bars
+            // Right side
+            this.ctx.fillRect(centerX + (i * barWidth), height - barHeight, barWidth - 2, barHeight);
+            // Left side
+            this.ctx.fillRect(centerX - (i * barWidth) - barWidth, height - barHeight, barWidth - 2, barHeight);
+        }
+        this.ctx.globalAlpha = 1.0;
+    }
+
+    async handleAIAction(action, targetId, btn) {
+        const targetElement = document.getElementById(targetId);
+        const text = targetElement.value.trim();
+        
+        if (!text) {
+            alert('Please provide some text first.');
+            return;
+        }
+
+        let originalText = '';
+        if (btn) {
+            originalText = btn.innerHTML;
+            btn.innerHTML = `<span class="ai-processing" style="display:inline-block; min-width:60px;">Wait...</span>`;
+            btn.disabled = true;
+        }
+
+        const startTime = performance.now();
+        try {
+            const response = await fetch('/api/ai-process', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action, text })
+            });
+
+            const data = await response.json();
+            const endTime = performance.now();
+
+            if (data.result) {
+                // Don't track 'tone' in avg latency as it's an background/utility call
+                if (action !== 'tone') {
+                    const latency = (endTime - startTime) / 1000;
+                    this.metrics.processing.total += latency;
+                    this.metrics.processing.count++;
+                    this.saveMetrics();
+                    this.updateMetric('tts-latency', `${(this.metrics.processing.total / this.metrics.processing.count).toFixed(2)}s`);
+                }
+
+                if (action === 'tone') {
+                    try {
+                        const toneData = typeof data.result === 'string' ? JSON.parse(data.result) : data.result;
+                        this.updateUITheme(toneData.category, toneData.label);
+                        
+                        let badgeId = targetId === 'tts-input' ? 'tts-tone-badge' : 'stt-tone-badge';
+                        const badge = document.getElementById(badgeId);
+                        badge.textContent = `Tone: ${toneData.label}`;
+                        badge.style.display = 'inline-block';
+                    } catch (e) {
+                        console.error('Tone parsing error:', e, data.result);
+                    }
+                } else {
+                    // Send result to the processed text area
+                    const resultTargetId = targetId === 'tts-input' ? 'translated-text' : 'stt-processed-text';
+                    document.getElementById(resultTargetId).value = data.result;
+
+                    // Auto-switch to Processed tab
+                    const toggleId = targetId === 'tts-input' ? 'tts-text-toggle' : 'stt-text-toggle';
+                    this.switchTextPane(document.getElementById(toggleId), 'processed');
+                    
+                    let badgeId = targetId === 'tts-input' ? 'tts-tone-badge' : 'stt-tone-badge';
+                    const b = document.getElementById(badgeId);
+                    if (b) b.style.display = 'none';
+                }
+            } else {
+                if (btn) alert('AI Error: ' + (data.error || 'Unknown error'));
+            }
+        } catch (err) {
+            console.error('AI error:', err);
+            if (btn) alert('Could not connect to AI service.');
+        } finally {
+            if (btn) {
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            }
+        }
+    }
+
+    updateUITheme(category, label) {
+        // Reset themes
+        document.body.classList.remove('theme-positive', 'theme-urgent', 'theme-analytical');
+        
+        // Apply new theme
+        if (category === 'positive') document.body.classList.add('theme-positive');
+        else if (category === 'urgent') document.body.classList.add('theme-urgent');
+        else if (category === 'analytical') document.body.classList.add('theme-analytical');
+
+        // Update Sentiment Badge
+        const badge = document.getElementById('sentiment-badge');
+        badge.textContent = label;
+        badge.style.display = 'inline-block';
+        
+        // Add a "Pulse" effect to the header
+        const header = document.querySelector('.header-top');
+        header.style.borderColor = 'var(--accent-dynamic)';
+        setTimeout(() => header.style.borderColor = '', 1500);
+    }
+
+    async handleConversation(userText) {
+        const persona = document.getElementById('persona-select').value;
+        const thinkingIndicator = document.getElementById('ai-thinking');
+        const processedArea = document.getElementById('stt-processed-text');
+        
+        thinkingIndicator.classList.remove('hidden');
+        processedArea.value = "AI is thinking...";
+        
+        const startTime = performance.now();
+        try {
+            const response = await fetch('/api/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text: userText, persona })
+            });
+            const data = await response.json();
+            const endTime = performance.now();
+            
+            if (data.reply) {
+                // Update AI Metrics
+                const latency = (endTime - startTime) / 1000;
+                this.metrics.ai.total += latency;
+                this.metrics.ai.count++;
+                this.saveMetrics();
+                this.updateMetric('ai-latency', `${(this.metrics.ai.total / this.metrics.ai.count).toFixed(2)}s`);
+
+                // Show AI reply in the processed area
+                processedArea.value = data.reply;
+                
+                // Switch to processed tab to show the chat
+                this.switchTextPane(document.getElementById('stt-text-toggle'), 'processed');
+                
+                // Automatically speak the reply
+                this.speak(data.reply);
+            } else {
+                processedArea.value = "AI Error: " + (data.error || "Received empty response from brain.");
+            }
+        } catch (err) {
+            console.error('Chat error:', err);
+            processedArea.value = "Connection Error: Could not reach the AI brain. Ensure app.py is running.";
+        } finally {
+            thinkingIndicator.classList.add('hidden');
         }
     }
 
     // --- Event Binding ---
     bindEvents() {
+        this.toggleSidebarBtn = document.getElementById('toggle-sidebar');
+        this.sidebar = document.getElementById('sidebar');
+
+        this.toggleSidebarBtn.addEventListener('click', () => {
+            this.sidebar.classList.toggle('collapsed');
+            // Resize canvas after the 400ms CSS transition
+            setTimeout(() => this.resizeCanvas(), 400);
+        });
+
         this.getStartedBtn.addEventListener('click', (e) => {
             e.preventDefault();
             this.landingScreen.classList.add('fade-out');
             setTimeout(() => {
                 this.landingScreen.style.display = 'none';
                 this.dashboardScreen.classList.remove('hidden');
-                this.dashboardScreen.style.display = 'block';
+                this.dashboardScreen.style.display = 'flex';
                 this.dashboardScreen.classList.add('fade-in');
                 this.resizeCanvas(); // Ensure visualizer is correct size
             }, 500);
+        });
+
+        // Sidebar Navigation
+        document.querySelectorAll('.nav-item').forEach(item => {
+            item.addEventListener('click', () => {
+                const view = item.getAttribute('data-view');
+                this.switchView(view);
+            });
+        });
+
+        // Text Panel Toggles
+        document.querySelectorAll('.text-toggle').forEach(toggle => {
+            toggle.querySelectorAll('.toggle-pill').forEach(pill => {
+                pill.addEventListener('click', () => {
+                    this.switchTextPane(toggle, pill.getAttribute('data-pane'));
+                });
+            });
         });
 
         this.backBtn.addEventListener('click', () => {
@@ -472,6 +751,54 @@ class EchoSync {
         document.getElementById('clear-stt').addEventListener('click', () => {
             document.getElementById('stt-result').value = '';
         });
+
+        document.querySelectorAll('.ai-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                const action = btn.getAttribute('data-action');
+                const target = btn.getAttribute('data-target');
+                this.handleAIAction(action, target, btn);
+            });
+        });
+    }
+
+    switchView(viewId) {
+        // Update Sidebar
+        document.querySelectorAll('.nav-item').forEach(nav => {
+            nav.classList.remove('active');
+            if (nav.getAttribute('data-view') === viewId) nav.classList.add('active');
+        });
+
+        // Update Panels
+        document.querySelectorAll('.view-panel').forEach(panel => {
+            panel.classList.add('hidden');
+        });
+        document.getElementById(`view-${viewId}`).classList.remove('hidden');
+
+        if (viewId === 'home') this.resizeCanvas();
+    }
+
+    updateMetric(id, value) {
+        const el1 = document.getElementById(`metric-${id}`);
+        const el2 = document.getElementById(`eval-${id}`);
+        if (el1) el1.textContent = value;
+        if (el2) el2.textContent = value;
+    }
+
+    switchTextPane(toggleContainer, paneId) {
+        // Update pill states
+        toggleContainer.querySelectorAll('.toggle-pill').forEach(p => {
+            p.classList.toggle('active', p.getAttribute('data-pane') === paneId);
+        });
+
+        // Update text pane visibility
+        const panel = toggleContainer.closest('.text-panel') || toggleContainer.closest('.card');
+        const wrapper = panel.querySelector('.text-pane-wrapper');
+        if (!wrapper) return;
+        const panes = wrapper.querySelectorAll('.text-pane');
+        const isOriginal = paneId === 'original';
+        panes[0].classList.toggle('active', isOriginal);  // first = original
+        panes[1].classList.toggle('active', !isOriginal); // second = processed
     }
 }
 
