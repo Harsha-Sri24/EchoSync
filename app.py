@@ -217,20 +217,24 @@ def ai_process():
         elif action == 'polish':
             prompt = f"Current Date: {current_date}. Fix any grammatical errors, remove filler words (like um, uh), and structure this text professionally while keeping the exact original meaning. Return ONLY the polished text:\n\n{text}"
         elif action == 'tone':
-            # Tone analysis needs specific JSON format
-            client = clients[0] # Try with primary first
-            prompt = f"Analyze the tone and sentiment of the following text. Respond with ONLY a single JSON object containing 'label' (2-4 words) and 'category' (one of: positive, urgent, analytical):\n\n{text}"
-            try:
-                response = client.models.generate_content(model='gemini-2.0-flash', contents=prompt)
-                result_text = response.text.strip()
+            # Highly sensitive tone analysis
+            prompt = (
+                f"Current Date: {current_date}. Analyze the emotional sentiment of the following text with high sensitivity. "
+                "If the text expresses joy, success, graduation, pride, or happiness, categorize it as 'positive'. "
+                "Respond with ONLY a single JSON object containing: "
+                "'label' (a 2-3 word description of the emotion) and "
+                "'category' (MUST be one of: 'positive', 'urgent', 'analytical').\n\n"
+                f"Text: {text}"
+            )
+            result_text = get_ai_response(prompt)
+            if result_text:
                 if "```json" in result_text:
                     result_text = result_text.split("```json")[1].split("```")[0].strip()
                 elif "```" in result_text:
                     result_text = result_text.split("```")[1].split("```")[0].strip()
                 return jsonify({"result": result_text})
-            except:
-                # Basic fallback for tone
-                return jsonify({"result": '{"label": "Neutral", "category": "analytical"}'})
+            else:
+                return jsonify({"result": '{"label": "Calm", "category": "analytical"}'})
         elif action == 'persona':
             persona = data.get('persona', 'standard')
             prompts = {
@@ -289,5 +293,7 @@ def chat():
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
-    print(f"EchoSync AI Backend starting on http://localhost:{PORT}")
-    app.run(debug=True, host=HOST, port=PORT)
+    # Use PORT from environment (default to 7860 for Hugging Face)
+    port = int(os.environ.get("PORT", 7860))
+    print(f"EchoSync AI Backend starting on http://0.0.0.0:{port}", flush=True)
+    app.run(host='0.0.0.0', port=port)
