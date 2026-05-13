@@ -13,14 +13,15 @@ from docx import Document
 
 load_dotenv(override=True)
 
-# Configure Gemini
-client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+# Configure Gemini (Lazy initialization to prevent startup crash)
+api_key = os.getenv("GEMINI_API_KEY")
+client = genai.Client(api_key=api_key) if api_key else None
 
 app = Flask(__name__, static_folder='frontend')
 CORS(app)
 
 # Configuration
-PORT = 5000
+PORT = int(os.environ.get("PORT", 7860))
 HOST = '0.0.0.0'
 UPLOAD_FOLDER = 'uploads'
 if not os.path.exists(UPLOAD_FOLDER):
@@ -32,9 +33,28 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 model = whisper.load_model("base", device=device)
 print(f"Model loaded on {device}")
 
+# Language name -> gTTS code mapping
+LANG_CODE_MAP = {
+    'Hindi': 'hi', 'Telugu': 'te', 'Tamil': 'ta', 'Kannada': 'kn',
+    'Malayalam': 'ml', 'Bengali': 'bn', 'Marathi': 'mr', 'Gujarati': 'gu',
+    'Punjabi': 'pa', 'Urdu': 'ur', 'Spanish': 'es', 'French': 'fr',
+    'German': 'de', 'Italian': 'it', 'Portuguese': 'pt', 'Dutch': 'nl',
+    'Russian': 'ru', 'Turkish': 'tr', 'Japanese': 'ja', 'Korean': 'ko',
+    'Chinese': 'zh-CN', 'Arabic': 'ar', 'Vietnamese': 'vi', 'Thai': 'th',
+    'Indonesian': 'id', 'Greek': 'el', 'Hebrew': 'iw', 'Polish': 'pl',
+    'Swedish': 'sv', 'Danish': 'da', 'Finnish': 'fi', 'Norwegian': 'no',
+    'Czech': 'cs', 'Hungarian': 'hu', 'Romanian': 'ro', 'Ukrainian': 'uk',
+    'Malay': 'ms', 'Filipino': 'fil', 'Khmer': 'km', 'Nepali': 'ne',
+    'Sinhala': 'si', 'Persian': 'fa', 'Afrikaans': 'af', 'Swahili': 'sw'
+}
+
 @app.route('/')
 def index():
     return send_from_directory('frontend', 'index.html')
+
+@app.route('/uploads/<path:filename>')
+def serve_upload(filename):
+    return send_from_directory(UPLOAD_FOLDER, filename)
 
 @app.route('/<path:path>')
 def static_proxy(path):
@@ -81,6 +101,22 @@ def synthesize():
     if not text:
         return jsonify({"error": "No text provided"}), 400
     
+    # Map language name to gTTS code if needed
+    if lang in LANG_CODE_MAP:
+        lang = LANG_CODE_MAP[lang]
+    
+    # Clean up old audio files (older than 5 minutes)
+    import time
+    now = time.time()
+    for f in os.listdir(UPLOAD_FOLDER):
+        fpath = os.path.join(UPLOAD_FOLDER, f)
+        if f.endswith('.mp3') and os.path.isfile(fpath):
+            if now - os.path.getmtime(fpath) > 300:
+                try:
+                    os.remove(fpath)
+                except:
+                    pass
+    
     try:
         tts = gTTS(text=text, lang=lang)
         filename = f"{uuid.uuid4()}.mp3"
@@ -90,6 +126,7 @@ def synthesize():
         # Return the URL to the file
         return jsonify({"url": f"/uploads/{filename}"})
     except Exception as e:
+        print(f"TTS Synthesis error: {e}", flush=True)
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/translate', methods=['POST'])
@@ -107,20 +144,23 @@ def translate():
         # List of models to try in order of preference
         models_to_try = ['gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-flash-latest']
         
+        # Use the failover client list
+        if not clients:
+            return jsonify({"error": "No API keys configured. Please add GEMINI_API_KEY to secrets."}), 500
+
         last_error = None
-        for model_name in models_to_try:
-            try:
-                response = client.models.generate_content(
-                    model=model_name,
-                    contents=prompt
-                )
-                translated_text = response.text.strip()
-                return jsonify({"translated_text": translated_text})
-            except Exception as e:
-                last_error = e
-                # If it's a quota issue, we might want to try another model, 
-                # but often the quota is shared. We'll try anyway.
-                continue
+        for current_client in clients:
+            for model_name in models_to_try:
+                try:
+                    response = current_client.models.generate_content(
+                        model=model_name,
+                        contents=prompt
+                    )
+                    translated_text = response.text.strip()
+                    return jsonify({"translated_text": translated_text})
+                except Exception as e:
+                    last_error = e
+                    continue
                 
         # If we get here, all models failed
         error_msg = str(last_error)
@@ -217,24 +257,23 @@ def ai_process():
         elif action == 'polish':
             prompt = f"Current Date: {current_date}. Fix any grammatical errors, remove filler words (like um, uh), and structure this text professionally while keeping the exact original meaning. Return ONLY the polished text:\n\n{text}"
         elif action == 'tone':
-            # Highly sensitive tone analysis
-            prompt = (
-                f"Current Date: {current_date}. Analyze the emotional sentiment of the following text with high sensitivity. "
-                "If the text expresses joy, success, graduation, pride, or happiness, categorize it as 'positive'. "
-                "Respond with ONLY a single JSON object containing: "
-                "'label' (a 2-3 word description of the emotion) and "
-                "'category' (MUST be one of: 'positive', 'urgent', 'analytical').\n\n"
-                f"Text: {text}"
-            )
-            result_text = get_ai_response(prompt)
-            if result_text:
+            # Tone analysis needs specific JSON format
+            if not clients:
+                return jsonify({"result": '{"label": "Neutral", "category": "analytical"}'})
+                
+            current_client = clients[0] # Try with primary first
+            prompt = f"Analyze the tone and sentiment of the following text. Respond with ONLY a single JSON object containing 'label' (2-4 words) and 'category' (one of: positive, urgent, analytical):\n\n{text}"
+            try:
+                response = current_client.models.generate_content(model='gemini-2.0-flash', contents=prompt)
+                result_text = response.text.strip()
                 if "```json" in result_text:
                     result_text = result_text.split("```json")[1].split("```")[0].strip()
                 elif "```" in result_text:
                     result_text = result_text.split("```")[1].split("```")[0].strip()
                 return jsonify({"result": result_text})
-            else:
-                return jsonify({"result": '{"label": "Calm", "category": "analytical"}'})
+            except:
+                # Basic fallback for tone
+                return jsonify({"result": '{"label": "Neutral", "category": "analytical"}'})
         elif action == 'persona':
             persona = data.get('persona', 'standard')
             prompts = {
@@ -293,7 +332,6 @@ def chat():
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
-    # Use PORT from environment (default to 7860 for Hugging Face)
-    port = int(os.environ.get("PORT", 7860))
-    print(f"EchoSync AI Backend starting on http://0.0.0.0:{port}", flush=True)
-    app.run(host='0.0.0.0', port=port)
+    # When running locally via 'python app.py'
+    print(f"EchoSync AI Backend starting in local mode on http://localhost:{PORT}")
+    app.run(debug=False, host=HOST, port=PORT)

@@ -1,3 +1,12 @@
+---
+title: EchoSync AI
+emoji: 🎙️
+colorFrom: purple
+colorTo: blue
+sdk: docker
+pinned: false
+---
+
 # EchoSync AI - Generative Speech & Intelligence
 
 **EchoSync AI** is a premium, cyber-minimalist web application that bridges the gap between speech, documents, and intelligence. It combines state-of-the-art foundation models like **OpenAI Whisper** and **Google Gemini 2.0 Flash** into a seamless, high-performance productivity suite.

@@ -276,10 +276,10 @@ class EchoSync {
 
             // Update Metrics
             const latency = (endTime - startTime) / 1000;
-            this.metrics.processing.total += latency;
-            this.metrics.processing.count++;
+            this.metrics.ai.total += latency;
+            this.metrics.ai.count++;
             this.saveMetrics();
-            this.updateMetric('tts-latency', `${(this.metrics.processing.total / this.metrics.processing.count).toFixed(2)}s`);
+            this.updateMetric('ai-latency', `${(this.metrics.ai.total / this.metrics.ai.count).toFixed(2)}s`);
 
             return data.result || text;
         } catch (err) {
@@ -289,9 +289,10 @@ class EchoSync {
     }
 
     async speak(overrideText = null) {
-        if (this.synth.speaking) {
-            this.synth.cancel();
-            await new Promise(resolve => setTimeout(resolve, 100));
+        // Stop any currently playing audio
+        if (this._currentAudio) {
+            this._currentAudio.pause();
+            this._currentAudio = null;
         }
 
         let text = overrideText || document.getElementById('tts-input').value;
@@ -312,6 +313,7 @@ class EchoSync {
         }
 
         let speakText = text;
+        let synthLang = targetLang || 'en'; // Language to send to gTTS
         const translatedTextArea = document.getElementById('translated-text');
 
         if (targetLang) {
@@ -336,10 +338,10 @@ class EchoSync {
                     
                     // Update Metrics
                     const latency = (endTime - startTime) / 1000;
-                    this.metrics.processing.total += latency;
-                    this.metrics.processing.count++;
+                    this.metrics.ai.total += latency;
+                    this.metrics.ai.count++;
                     this.saveMetrics();
-                    this.updateMetric('tts-latency', `${(this.metrics.processing.total / this.metrics.processing.count).toFixed(2)}s`);
+                    this.updateMetric('ai-latency', `${(this.metrics.ai.total / this.metrics.ai.count).toFixed(2)}s`);
 
                     const words = speakText.split(/\s+/).filter(w => w).length;
                     this.metrics.wordCount = (this.metrics.wordCount || 0) + words;
@@ -348,74 +350,99 @@ class EchoSync {
                 } else {
                     console.warn('Translation returned no text:', data);
                     alert('Translation failed: ' + (data.error || 'Unknown error'));
+                    this.speakBtn.disabled = false;
+                    this.speakBtn.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg> Generate Audio`;
+                    return;
                 }
             } catch (err) {
                 console.error('Translation error:', err);
                 alert('Could not connect to translation service.');
+                this.speakBtn.disabled = false;
+                this.speakBtn.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg> Generate Audio`;
+                return;
             }
         }
 
+        // --- Use Backend gTTS for audio synthesis ---
+        this.speakBtn.textContent = 'Synthesizing...';
         const startTTS = performance.now();
-        const utterance = new SpeechSynthesisUtterance(speakText);
-        
-        // Track TTS Metrics
-        utterance.onstart = () => {
-            const endTTS = performance.now();
-            const ttsLatency = (endTTS - startTTS) / 1000;
-            this.metrics.tts.total += ttsLatency;
-            this.metrics.tts.count++;
-            this.metrics.charCount += speakText.length;
-            this.saveMetrics();
-            
-            this.updateMetric('tts-latency', `${(this.metrics.tts.total / this.metrics.tts.count).toFixed(2)}s`);
-            this.updateMetric('char-count', this.metrics.charCount);
-        };
 
-        const voiceSelect = document.getElementById('voice-select');
-        let selectedVoiceIndex = voiceSelect.value;
-        
-        // Auto-select voice for target language if translating
-        if (targetLang) {
-            const langCode = this.langCodeMap[targetLang] || targetLang.substring(0, 2).toLowerCase();
-            utterance.lang = langCode; // Set language explicitly
+        try {
+            const synthResponse = await fetch('/api/synthesize', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text: speakText, lang: synthLang })
+            });
+            const synthData = await synthResponse.json();
 
-            const bestVoiceIndex = this.voices.findIndex(v => v.lang.toLowerCase().includes(langCode));
-            
-            if (bestVoiceIndex !== -1) {
-                utterance.voice = this.voices[bestVoiceIndex];
-                // Update the dropdown UI to show the correct voice
-                voiceSelect.value = bestVoiceIndex;
-            } else if (selectedVoiceIndex) {
-                utterance.voice = this.voices[selectedVoiceIndex];
+            if (synthData.error) {
+                console.error('EchoSync TTS Synthesis error:', synthData.error);
+                alert('Voice synthesis failed: ' + synthData.error);
+                this.speakBtn.disabled = false;
+                this.speakBtn.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg> Generate Audio`;
+                return;
             }
-        } else {
-            utterance.lang = 'en-US';
-            if (selectedVoiceIndex) {
-                utterance.voice = this.voices[selectedVoiceIndex];
-            }
+
+            const audioUrl = synthData.url;
+            console.log(`EchoSync TTS: Backend synthesized audio at ${audioUrl}`);
+
+            const audio = new Audio(audioUrl);
+            this._currentAudio = audio;
+
+            audio.addEventListener('playing', () => {
+                console.log("EchoSync: Audio playback started.");
+                const endTTS = performance.now();
+                const ttsLatency = (endTTS - startTTS) / 1000;
+                this.metrics.tts.total += ttsLatency;
+                this.metrics.tts.count++;
+                this.metrics.charCount += speakText.length;
+                this.saveMetrics();
+                this.updateMetric('tts-latency', `${(this.metrics.tts.total / this.metrics.tts.count).toFixed(2)}s`);
+                this.updateMetric('char-count', this.metrics.charCount);
+            });
+
+            audio.addEventListener('ended', () => {
+                console.log("EchoSync: Audio playback finished.");
+                this._currentAudio = null;
+                this.stopBtn.style.display = 'none';
+                this.speakBtn.disabled = false;
+                this.speakBtn.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg> Generate Audio`;
+                this.stopVisualizer();
+            });
+
+            audio.addEventListener('error', (e) => {
+                console.error("EchoSync: Audio playback error:", e);
+                this._currentAudio = null;
+                this.stopBtn.style.display = 'none';
+                this.speakBtn.disabled = false;
+                this.speakBtn.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg> Generate Audio`;
+                this.stopVisualizer();
+            });
+
+            // Apply rate via playbackRate (pitch not supported for Audio element but rate is)
+            audio.playbackRate = parseFloat(document.getElementById('rate').value) || 1.0;
+
+            audio.play();
+            this.stopBtn.style.display = 'flex';
+
+        } catch (err) {
+            console.error('EchoSync TTS fetch error:', err);
+            alert('Could not connect to voice synthesis service.');
+            this.speakBtn.disabled = false;
+            this.speakBtn.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg> Generate Audio`;
         }
-
-        utterance.pitch = document.getElementById('pitch').value;
-        utterance.rate = document.getElementById('rate').value;
-
-        this.synth.speak(utterance);
-        this.speakBtn.disabled = false;
-        this.speakBtn.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg> Generate Audio`;
-        
-        // Show stop button while speaking
-        this.stopBtn.style.display = 'flex';
-        
-        utterance.onend = () => {
-            this.stopBtn.style.display = 'none';
-        };
-        utterance.onerror = () => {
-            this.stopBtn.style.display = 'none';
-        };
     }
 
     stopSpeaking() {
-        this.synth.cancel();
+        if (this._currentAudio) {
+            this._currentAudio.pause();
+            this._currentAudio.currentTime = 0;
+            this._currentAudio = null;
+        }
+        this.stopVisualizer();
         this.stopBtn.style.display = 'none';
+        this.speakBtn.disabled = false;
+        this.speakBtn.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg> Generate Audio`;
     }
 
 
@@ -451,10 +478,41 @@ class EchoSync {
         this.draw();
     }
 
+    startAudioVisualizer(audioElement) {
+        // Create AudioContext and connect the Audio element to the analyser
+        try {
+            if (this.audioContext && this.audioContext.state !== 'closed') {
+                this.audioContext.close();
+            }
+        } catch(e) { /* ignore */ }
+
+        this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const source = this.audioContext.createMediaElementSource(audioElement);
+        this.analyser = this.audioContext.createAnalyser();
+        this.analyser.fftSize = 64;
+        source.connect(this.analyser);
+        this.analyser.connect(this.audioContext.destination); // Must connect to destination for audio to play
+
+        const bufferLength = this.analyser.frequencyBinCount;
+        this.dataArray = new Uint8Array(bufferLength);
+
+        this.draw();
+    }
+
     stopVisualizer() {
-        if (this.animationId) cancelAnimationFrame(this.animationId);
-        if (this.audioContext) this.audioContext.close();
-        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        if (this.animationId) {
+            cancelAnimationFrame(this.animationId);
+            this.animationId = null;
+        }
+        try {
+            if (this.audioContext && this.audioContext.state !== 'closed') {
+                this.audioContext.close();
+            }
+        } catch(e) { /* ignore */ }
+        this.audioContext = null;
+        if (this.ctx && this.canvas) {
+            this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        }
     }
 
     draw() {
@@ -517,10 +575,10 @@ class EchoSync {
                 // Don't track 'tone' in avg latency as it's an background/utility call
                 if (action !== 'tone') {
                     const latency = (endTime - startTime) / 1000;
-                    this.metrics.processing.total += latency;
-                    this.metrics.processing.count++;
+                    this.metrics.ai.total += latency;
+                    this.metrics.ai.count++;
                     this.saveMetrics();
-                    this.updateMetric('tts-latency', `${(this.metrics.processing.total / this.metrics.processing.count).toFixed(2)}s`);
+                    this.updateMetric('ai-latency', `${(this.metrics.ai.total / this.metrics.ai.count).toFixed(2)}s`);
                 }
 
                 if (action === 'tone') {

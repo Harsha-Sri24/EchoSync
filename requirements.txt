@@ -3,7 +3,6 @@ flask-cors
 openai-whisper
 gTTS
 pydub
-torch
 openai
 google-genai
 python-dotenv

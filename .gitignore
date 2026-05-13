@@ -1,24 +1,4 @@
-# API Keys and Secrets
 .env
-TERTIARY_API_KEY
-BACKUP_API_KEY
-GEMINI_API_KEY
-
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-venv/
-env/
-.env
-
-# EchoSync Specific
+node_modules/
 uploads/
 error_log.txt
-*.wav
-*.mp3
-
-# IDEs
-.vscode/
-.idea/
-.DS_Store
